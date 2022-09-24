@@ -14,7 +14,7 @@ class _SphereBallState extends State<SphereBall> {
 
   @override
   Widget build(BuildContext context) {
-    final size = Size.square(MediaQuery.of(context).size.shortestSide);
+    final size = Size.square(MediaQuery.of(context).size.shortestSide / 5);
 
     return SphereDensity(
         lightSource: lightSource,
