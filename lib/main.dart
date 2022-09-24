@@ -1,14 +1,13 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_gmaps/directions_model.dart';
-import 'package:flutter_gmaps/directions_repository.dart';
+import 'package:flutter_gmaps/models/object_model.dart';
 import 'package:flutter_gmaps/sphere_ball.dart';
 import 'dart:ui' as ui;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'models/lists_model.dart';
 
 void main() {
   runApp(MyApp());
@@ -36,6 +35,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
+    setUpList();
     setupMarker();
     super.initState();
   }
@@ -49,10 +49,12 @@ class _MapScreenState extends State<MapScreen> {
   GoogleMapController _googleMapController;
   Marker _origin;
   Marker _sphere;
+  List<Marker> locations;
   Uint8List sphereBytes;
   Directions _info;
   List<Marker> _markers = [];
   bool isVisible = true;
+  ListsModel listsModel = ListsModel();
 
   @override
   void dispose() {
@@ -77,16 +79,34 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
 
+      int i = 0;
+      List<Marker> list = [];
+      listsModel.dev1
+          .forEach((element) async {
+            BitmapDescriptor icon = BitmapDescriptor.fromBytes(
+                await getBytesFromAsset('assets/boy.png', 150));
+            list.add(Marker(
+              markerId: MarkerId((i++).toString()),
+              icon: icon,
+              position: LatLng(
+                double.parse(element.latitude),
+                double.parse(element.longitude),
+              ),
+            ));
+          });
+
       await Future.delayed(Duration(seconds: 1));
 
       setState(() {
         _markers.add(_sphere);
+        _markers.addAll(list);
       });
     });
     _origin = Marker(
         markerId: const MarkerId('ID'),
         infoWindow: const InfoWindow(title: 'Marker1'),
-        icon: BitmapDescriptor.fromBytes(await getBytesFromAsset('assets/boy.png', 150)),
+        icon: BitmapDescriptor.fromBytes(
+            await getBytesFromAsset('assets/boy.png', 150)),
         position: LatLng(
           40.7435228393862,
           -74.006950753951,
@@ -118,9 +138,11 @@ class _MapScreenState extends State<MapScreen> {
   Future<Uint8List> _capturePng() async {
     try {
       print('inside');
-      RenderRepaintBoundary boundary = containerKey.currentContext.findRenderObject();
+      RenderRepaintBoundary boundary =
+          containerKey.currentContext.findRenderObject();
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      ByteData byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
       var pngBytes = byteData.buffer.asUint8List();
       sphereBytes = pngBytes;
       var bs64 = base64Encode(pngBytes);
@@ -153,12 +175,16 @@ class _MapScreenState extends State<MapScreen> {
                   polylineId: const PolylineId('overview_polyline'),
                   color: Colors.red,
                   width: 5,
-                  points: _info.polylinePoints.map((e) => LatLng(e.latitude, e.longitude)).toList(),
+                  points: _info.polylinePoints
+                      .map((e) => LatLng(e.latitude, e.longitude))
+                      .toList(),
                 ),
             },
           ),
           if (isVisible)
-            SizedBox(height: 100, child: RepaintBoundary(key: containerKey, child: SphereBall())),
+            SizedBox(
+                height: 100,
+                child: RepaintBoundary(key: containerKey, child: SphereBall())),
         ],
       ),
     );
@@ -167,10 +193,30 @@ class _MapScreenState extends State<MapScreen> {
   Future<Uint8List> getBytesFromAsset(String path, int width) async {
     ByteData data = await rootBundle.load(path);
 
-    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: width);
+    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
+        targetWidth: width);
 
     ui.FrameInfo fi = await codec.getNextFrame();
 
-    return (await fi.image.toByteData(format: ui.ImageByteFormat.png)).buffer.asUint8List();
+    return (await fi.image.toByteData(format: ui.ImageByteFormat.png))
+        .buffer
+        .asUint8List();
+  }
+
+  Future<String> loadAsset() async {
+    return await rootBundle.loadString('assets/localization.json');
+  }
+
+  void setUpList() async {
+    String s = await loadAsset();
+    Map<String, dynamic> map = await readJsonFile(s);
+    listsModel.dev1 = (map['dev1'] as List<dynamic>)
+        .map((e) => ObjectModel.fromJson(e))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> readJsonFile(String input) async {
+    var map = jsonDecode(input);
+    return map;
   }
 }
