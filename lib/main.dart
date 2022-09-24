@@ -44,20 +44,20 @@ class _MapScreenState extends State<MapScreen> {
     setupMarker();
   }
 
-  static const _initialCameraPosition = CameraPosition(
-    target: LatLng(37.773972, -122.431297),
-    tilt: 50,
-    zoom: 11.5,
-  );
+  CameraPosition _initialCameraPosition;
 
   GoogleMapController _googleMapController;
   List<Marker> locations;
   Uint8List sphereBytes;
   Directions _info;
   List<Marker> _markers = [];
+  List<Marker> _newMarkers = [];
   bool isVisible = true;
   bool showInfo = false;
   ListsModel listsModel = ListsModel();
+  double zoom = 11.5;
+
+  double ratio = 1;
 
   @override
   void dispose() {
@@ -98,39 +98,26 @@ class _MapScreenState extends State<MapScreen> {
       anchor: Offset(0.5, 1),
     );
 
-    _markers.add(marker1);
-    _markers.add(marker2);
+    _newMarkers.add(marker1);
+    _newMarkers.add(marker2);
   }
 
   setupMarker() async {
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-      await _capturePng();
-      setState(() {
-        isVisible = false;
-      });
+    _newMarkers.clear();
+    await Future.delayed(Duration(milliseconds: 500));
+    await _capturePng();
+    setState(() {
+      isVisible = false;
+    });
 
-      for (int i = 0; i < listsModel.cases.length; i++) {
-        for (int j = 0; j < listsModel.cases[i].length; j++) {
-          await fetchMarker(listsModel.cases[i][j], i.toString() + j.toString());
-        }
+    for (int i = 0; i < listsModel.cases.length; i++) {
+      for (int j = 0; j < listsModel.cases[i].length; j++) {
+        await fetchMarker(listsModel.cases[i][j], i.toString() + j.toString());
       }
+    }
 
-      // await Future.delayed(Duration(seconds: 1));
-
-      setState(() {});
-
-      _googleMapController.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(
-              double.parse(listsModel.dev9.first.latitude),
-              double.parse(listsModel.dev9.first.longitude),
-            ),
-            tilt: 50,
-            zoom: 30,
-          ),
-        ),
-      );
+    setState(() {
+      _markers.addAll(_newMarkers);
     });
   }
 
@@ -138,16 +125,12 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _capturePng() async {
     try {
-      print('inside');
       RenderRepaintBoundary boundary = containerKey.currentContext.findRenderObject();
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       var pngBytes = byteData.buffer.asUint8List();
+
       sphereBytes = pngBytes;
-      var bs64 = base64Encode(pngBytes);
-      print(pngBytes);
-      print(bs64);
-      setState(() {});
       return pngBytes;
     } catch (e) {
       print(e);
@@ -168,9 +151,29 @@ class _MapScreenState extends State<MapScreen> {
             initialCameraPosition: _initialCameraPosition,
             onMapCreated: (controller) => _googleMapController = controller,
             markers: _markers.isNotEmpty ? Set.of(_markers) : {},
-            onCameraMove:(cameraMove){
-              double zoom = cameraMove.zoom;
-              print(zoom);
+            onCameraMove: (cameraMove) {
+              if ((cameraMove.zoom - zoom).abs() > 0.001) {
+                setupMarker();
+              }
+              //zoom out
+              if (cameraMove.zoom - zoom > 0.001) {
+                setState(() {
+                  ratio += 0.01;
+                  if (ratio >= 1) {
+                    ratio = 1;
+                  }
+                  zoom = cameraMove.zoom;
+                });
+                //zoom in
+              } else if (cameraMove.zoom - zoom < 0) {
+                setState(() {
+                  ratio -= 0.01;
+                  if (ratio <= 0.1) {
+                    ratio = 0.1;
+                  }
+                  zoom = cameraMove.zoom;
+                });
+              }
             },
             polylines: {
               if (_info != null)
@@ -182,8 +185,10 @@ class _MapScreenState extends State<MapScreen> {
                 ),
             },
           ),
-          if (isVisible)
-            SizedBox(height: 80, child: RepaintBoundary(key: containerKey, child: SphereBall())),
+          SizedBox(
+              height: 80 * ratio,
+              width: 80 * ratio,
+              child: RepaintBoundary(key: containerKey, child: SphereBall())),
           if (showInfo)
             Align(
               alignment: Alignment.topCenter,
@@ -237,6 +242,15 @@ class _MapScreenState extends State<MapScreen> {
       element.addAll(list);
       i++;
     });
+
+    _initialCameraPosition = CameraPosition(
+      target: LatLng(
+        double.parse(listsModel.cases[0][0].latitude),
+        double.parse(listsModel.cases[0][0].longitude),
+      ),
+      tilt: 50,
+      zoom: 11.5,
+    );
 
     print("done with fetching");
   }
